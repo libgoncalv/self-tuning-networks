@@ -1,4 +1,4 @@
-# Self-Tuning Networks
+# Self-Tuning Networks 
 
 This repository contains the code used for the paper [Self-Tuning Networks: Bilevel Optimization of Hyperparameters using Structured Best-Response Functions (ICLR 2019)](https://arxiv.org/abs/1903.03088).
 
@@ -6,18 +6,14 @@ This repository contains the code used for the paper [Self-Tuning Networks: Bile
 ## Requirements
 
 * Python 3.6.x
-* Pytorch 0.4.1
+* Pytorch 1.8.x
+* Stable Baselines 3 
 
 
 ## Setup
 
-The following is an example of how to create an environment with the appropriate versions of the dependencies:
-
 ```
-conda create -n stn-env python=3.6
-source activate stn-env
-conda install pytorch=0.4.1 cuda80 -c pytorch
-conda install torchvision -c pytorch
+pip install stablebaselines3
 pip install -r requirements.txt
 ```
 
@@ -180,3 +176,18 @@ If you use this code, please cite:
   year={2019}
 }
 ```
+
+
+# Reinforcement Learning
+
+The library used for Reinforcement Learning (RL) is Stable Baselines 3. The proposed contribution simply replaces the STN hyper-parameter optimization by selected values by the RL agent. To this end, a Soft Actor Critic (SAC) agent is trained to select, for one or multiple hyper-parameters, the best value at each validation batch iteration.
+
+## LSTM Experiment with RL
+
+The commands for the LSTM experiments should be run from inside the `lstm` folder and the PTB dataset already downloaded.
+To train SAC on all hyper-parameters tuning:
+```
+python RL_env.py
+```
+
+To change the optimized hyper-parameters, simply change the variable parameters in the file RL_env.py
