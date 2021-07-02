@@ -182,6 +182,14 @@ If you use this code, please cite:
 
 The library used for Reinforcement Learning (RL) is Stable Baselines 3. The proposed contribution simply replaces the STN hyper-parameter optimization by selected values by the RL agent. To this end, a Soft Actor Critic (SAC) agent is trained to select, for one or multiple hyper-parameters, the best value at each validation batch iteration.
 
+## CNN Experiment with RL
+
+The commands for the LSTM experiments should be run from inside the `cnn` folder.
+To train SAC on all hyper-parameters tuning:
+```
+python RL_env.py
+```
+
 ## LSTM Experiment with RL
 
 The commands for the LSTM experiments should be run from inside the `lstm` folder and the PTB dataset already downloaded.
