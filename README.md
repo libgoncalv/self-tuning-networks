@@ -13,6 +13,7 @@ This repository contains the code used for the paper [Self-Tuning Networks: Bile
 ## Setup
 
 ```
+pip install torch 1.8.0
 pip install stablebaselines3
 pip install -r requirements.txt
 ```
