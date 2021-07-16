@@ -19,8 +19,8 @@ from RL_train import iterator
 
 # Definition of hyper-parameters to tune with lower and upper value limits
 # Usage -> "param" : (lower, upper)
-parameters = {'dropout0' : (0.05,0.85), 'dropout1' : (0.05,0.85), 'dropout2' : (0.05,0.85), 'dropout3' : (0.05,0.85), 'dropout4' : (0.05,0.85), \
-              'fcdropout0' : (0.05,0.85), 'fcdropout1' : (0.05,0.85), 'indropout' : (0.05,0.85), \
+parameters = {'dropout0' : (0.05,0.8), 'dropout1' : (0.05,0.8), 'dropout2' : (0.05,0.8), 'dropout3' : (0.05,0.8), 'dropout4' : (0.05,0.8), \
+              'fcdropout0' : (0.05,0.8), 'fcdropout1' : (0.05,0.8), 'indropout' : (0.05,0.8), \
               'inscale' : (0.05,0.25), 'hue' : (0.05,0.45), 'contrast' : (0.05,0.90), 'sat' : (0.05,0.90), 'bright' : (0.05,0.90), \
               'cutlength' : (0.05,23.90), 'cutholes' : (0.05,3.90)}
 # Definition of metrics presented to the agent with:
