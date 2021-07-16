@@ -92,7 +92,7 @@ class CustomEnv(gym.Env):
 
   def observation_scaling(self, obs):
     # Verification of observed values to be in respective (upper, lower) ranges
-    for i in range(len(metrics)+1+len(parameters)):
+    for i in range(len(metrics)+1):
       for j in range(self.window_size):
         if obs[i][j] > self.upper_limit_observations[i][j]:
           obs[i][j] = self.upper_limit_observations[i][j]
