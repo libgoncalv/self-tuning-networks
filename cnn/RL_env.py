@@ -58,6 +58,7 @@ class CustomEnv(gym.Env):
     # Number of steps between updates of validation metrics
     # Avoids reaching the upper limit of number of thresholdout validation metrics presented to the agent
     self.steps_between_thresholdouts = 10
+    self.running_avg_lgt = 10
     # Number of step statistics visible from the agent
     self.window_size = 500
     self.reset_stat()
