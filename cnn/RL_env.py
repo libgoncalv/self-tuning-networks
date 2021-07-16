@@ -20,7 +20,7 @@ from RL_train import iterator
 # Definition of hyper-parameters to tune with lower and upper value limits
 # Usage -> "param" : (lower, upper)
 parameters = {'dropout0' : (0.05,0.85), 'dropout1' : (0.05,0.85), 'dropout2' : (0.05,0.85), 'dropout3' : (0.05,0.85), 'dropout4' : (0.05,0.85), \
-              'fcdropout0' : (0.05,0.85), 'fcdropout1' : (0.05,0.85), 'indropout' : (0.05,0.90), \
+              'fcdropout0' : (0.05,0.85), 'fcdropout1' : (0.05,0.85), 'indropout' : (0.05,0.85), \
               'inscale' : (0.05,0.25), 'hue' : (0.05,0.45), 'contrast' : (0.05,0.90), 'sat' : (0.05,0.90), 'bright' : (0.05,0.90), \
               'cutlength' : (0.05,23.90), 'cutholes' : (0.05,3.90)}
 # Definition of metrics presented to the agent with:
@@ -32,24 +32,24 @@ parameters = {'dropout0' : (0.05,0.85), 'dropout1' : (0.05,0.85), 'dropout2' : (
 metrics = {'val_acc' : (0.0,1.0, 1.0, 'acc'), 'val_loss' : (0.0,100.0, 10.0, 'loss'), 'acc' : (0.0,1.0), 'loss' : (0.0,100.0)}
 val_metrics = {'val_acc' : 0.0, 'val_loss' : 0.0}
 not_val_metrics = {'acc' : 0.0, 'loss' : 0.0}
+# Metrics used for computing the reward of the agent with their respective coefficient factor
+reward_metrics = {'val_acc' : 100.0, 'acc' : 1.0}
 
 
 class CustomEnv(gym.Env):
   """Custom Environment that follows gym interface"""
   metadata = {'render.modes': ['human']}
 
-  def __init__(self, parameters, metrics, val_metrics, not_val_metrics, test_mode=False):
+  def __init__(self, parameters, metrics, val_metrics, not_val_metrics, reward_metrics, test_mode=False):
     super(CustomEnv, self).__init__()
 
     # Whether it is an environment used to train or test the agent 
     self.test_mode = test_mode
-    self.RL_steps = 0
-    # Number of RL steps before unlocking a new hyper-parameter to tune
-    self.RL_steps_per_hparam = 120000
     self.parameters = parameters
     self.metrics = metrics
     self.val_metrics = val_metrics
     self.not_val_metrics = not_val_metrics
+    self.reward_metrics = reward_metrics
 
     # Number of train steps between changing the hyper-parameters values
     self.train_steps = 2
@@ -57,7 +57,7 @@ class CustomEnv(gym.Env):
     self.valid_steps = 1
     # Number of steps between updates of validation metrics
     # Avoids reaching the upper limit of number of thresholdout validation metrics presented to the agent
-    self.steps_between_thresholdouts = 100
+    self.steps_between_thresholdouts = 10
     # Number of step statistics visible from the agent
     self.window_size = 500
     self.reset_stat()
@@ -65,7 +65,7 @@ class CustomEnv(gym.Env):
 
     # Definition of action and observation space for the agent
     self.action_space = gym.spaces.Box(-1.0, 1.0, shape=(len(parameters),), dtype = np.float32)
-    self.observation_space = gym.spaces.Box(0.0, 1.0, shape=(len(metrics)+1+len(parameters), self.window_size), dtype = np.float32)
+    self.observation_space = gym.spaces.Box(0.0, 1.0, shape=(len(metrics)+1, self.window_size), dtype = np.float32)
     
   
 
@@ -78,12 +78,10 @@ class CustomEnv(gym.Env):
 
     self.lower_limit_observations = [np.ones(self.window_size)*self.metrics[key][0] for key in self.metrics]
     self.lower_limit_observations.append(np.zeros(self.window_size))
-    self.lower_limit_observations.extend([np.ones(self.window_size)*self.parameters[key][0] for key in self.parameters])
     self.lower_limit_observations = np.array(self.lower_limit_observations)
 
     self.upper_limit_observations = [np.ones(self.window_size)*self.metrics[key][1] for key in self.metrics]
     self.upper_limit_observations.append(np.ones(self.window_size)*100000) # Upper bound depending on the maximum number of classifier training timestep
-    self.upper_limit_observations.extend([np.ones(self.window_size)*self.parameters[key][1] for key in self.parameters])
     self.upper_limit_observations = np.array(self.upper_limit_observations)
 
 
@@ -113,19 +111,11 @@ class CustomEnv(gym.Env):
 
   def step(self, hparams_scaled):
     self.n_steps += 1
-    self.RL_steps += 1
     hparams = self.action_scaling(hparams_scaled)
     hparams_dict = dict(self.parameters)
     i = 0
     for key in hparams_dict:
-      # If it is a test environment 
-      # or 
-      # If enough RL steps have passed to allow the tuning of this hyper-parameter 
-      if self.test_mode or i <= self.RL_steps // self.RL_steps_per_hparam:
-        hparams_dict[key] = float(hparams[i])
-      # Otherwise the lower value is used
-      else:
-        hparams_dict[key] = self.parameters[key][0]
+      hparams_dict[key] = float(hparams[i])
       i += 1
 
     # Writing of new hyper-parameters values
@@ -143,6 +133,8 @@ class CustomEnv(gym.Env):
       done = False
     except StopIteration:
       done = True
+      if (self.test_mode):
+        print("This was a test acc game for the agent")
 
     obs_scaled = self.observation_scaling(self.obs)
     reward = self.build_reward(done)
@@ -155,6 +147,14 @@ class CustomEnv(gym.Env):
 
   def reset(self):
     self.n_steps = 0
+    # Initialisation of running average
+    self.running_avg = {}
+    for key in self.metrics:
+      self.running_avg[key] = [0.0]*self.running_avg_lgt
+    # Initialisation of last val ppl for the reward function
+    self.last_reward_metrics = {}
+    for key in self.reward_metrics:
+      self.last_reward_metrics[key] = 0.0
     self.DNN = iterator(self.train_steps, self.valid_steps)
     stats = next(self.DNN)
     self.build_observation(stats, init=True)
@@ -180,21 +180,33 @@ class CustomEnv(gym.Env):
 
         
 
+  def update_running_avg(self, stats):
+    for key in self.metrics:
+      if len(stats[key]) > self.running_avg_lgt:
+        stats[key] = stats[key][-self.running_avg_lgt:]
+    for key in self.metrics:
+      for i in range(self.running_avg_lgt-len(stats[key])):
+        self.running_avg[key][i] = self.running_avg[key][i+len(stats[key])]
+      for i in range(len(stats[key])):
+        self.running_avg[key][self.running_avg_lgt-len(stats[key])+i] = stats[key][i]
+
+
 
 
   def build_observation(self, stats, init=False):
+    self.update_running_avg(stats)
     for key in self.not_val_metrics:
-      self.not_val_metrics[key] = mean(stats[key])
+      self.not_val_metrics[key] = mean(self.running_avg[key])
 
     if self.n_steps % self.steps_between_thresholdouts == 0:
         for key in self.val_metrics:
-          self.val_metrics[key] = mean(stats[key])
+          self.val_metrics[key] = mean(self.running_avg[key])
         for key in self.val_metrics:
           self.val_metrics[key] = self.thresholdout(self.not_val_metrics[self.metrics[key][3]], self.val_metrics[key], self.metrics[key][2])
 
-    # If the game begins, we initialize the observation with zeros
+    # If the game begins, we initialize the obs matrix
     if init:
-      self.obs = np.zeros((len(metrics)+1+len(parameters), self.window_size), dtype=np.float32)
+      self.obs = np.zeros((len(metrics)+1, self.window_size), dtype=np.float32)
 
     # Otherwise, we update it with last obtained stats
     else:
@@ -210,20 +222,23 @@ class CustomEnv(gym.Env):
         self.obs[i][-1] = self.val_metrics[key]
         i += 1
       self.obs[i][-1] = mean(stats['global_step'])
-      i += 1
-      for key in self.parameters:
-        self.obs[i][-1] = mean(stats[key])
-        i += 1
 
 
 
 
 
   def build_reward(self, done):
-    if done:
-        reward = self.val_metrics['val_acc']
-    else:
-        reward = 0.0
+    reward = 0.0
+    for key in self.reward_metrics:
+      if key in self.val_metrics:
+        reward += self.reward_metrics[key] * (self.val_metrics[key] - self.last_reward_metrics[key])
+      else:
+        reward += self.reward_metrics[key] * (self.not_val_metrics[key] - self.last_reward_metrics[key])
+    for key in self.reward_metrics:
+      if key in self.val_metrics:
+        self.last_reward_metrics[key] = self.val_metrics[key]
+      else:
+        self.last_reward_metrics[key] = self.not_val_metrics[key]
     return reward
     
 
@@ -244,16 +259,16 @@ class CustomEnv(gym.Env):
 
 
 
-env = CustomEnv(parameters, metrics, val_metrics, not_val_metrics)
+env = CustomEnv(parameters, metrics, val_metrics, not_val_metrics, reward_metrics)
 n_actions = env.action_space.shape[-1]
 action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=0.1 * np.ones(n_actions))  
 
-valid_env = CustomEnv(parameters, metrics, val_metrics, not_val_metrics, test_mode=True)
+valid_env = CustomEnv(parameters, metrics, val_metrics, not_val_metrics, reward_metrics, test_mode=True)
 policy_kwargs = dict(normalize_images=False)
-eval_callback = EvalCallback(valid_env, verbose=1, deterministic=True, render=False, n_eval_episodes=1, eval_freq=60000, best_model_save_path="./Agents/")
+eval_callback = EvalCallback(valid_env, verbose=1, deterministic=True, render=False, n_eval_episodes=1, eval_freq=1000, best_model_save_path="./Agents/SAC/")
 
 model = SAC("MlpPolicy", env, action_noise=action_noise, policy_kwargs=policy_kwargs, verbose=0)
-model.learn(callback=eval_callback, total_timesteps=1920000)
+model.learn(callback=eval_callback, total_timesteps=20000)
 
 
 
@@ -268,7 +283,7 @@ with open('Results/valid.ser', 'wb') as fp:
 
 
 
-env = CustomEnv(parameters, metrics, val_metrics, not_val_metrics, test_mode=True)
+env = CustomEnv(parameters, metrics, val_metrics, not_val_metrics, reward_metrics, test_mode=True)
 model = SAC.load("Agents/SAC/best_model.zip")
 for ep in range(4):
     obs = env.reset()

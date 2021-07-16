@@ -279,7 +279,7 @@ with open('Results/valid.ser', 'wb') as fp:
 
 
 
-env = CustomEnv(parameters, metrics, val_metrics, not_val_metrics, test_mode=True)
+env = CustomEnv(parameters, metrics, val_metrics, not_val_metrics, reward_metrics, test_mode=True)
 model = SAC.load("Agents/SAC/best_model.zip")
 for ep in range(4):
     obs = env.reset()
