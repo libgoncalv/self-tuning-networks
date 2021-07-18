@@ -266,10 +266,10 @@ action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=0.1 * np.ones(n
 
 valid_env = CustomEnv(parameters, metrics, val_metrics, not_val_metrics, reward_metrics, test_mode=True)
 policy_kwargs = dict(normalize_images=False)
-eval_callback = EvalCallback(valid_env, verbose=1, deterministic=True, render=False, n_eval_episodes=1, eval_freq=1000, best_model_save_path="./Agents/SAC/")
+eval_callback = EvalCallback(valid_env, verbose=1, deterministic=True, render=False, n_eval_episodes=1, eval_freq=100000, best_model_save_path="./Agents/SAC/")
 
 model = SAC("MlpPolicy", env, action_noise=action_noise, policy_kwargs=policy_kwargs, verbose=0)
-model.learn(callback=eval_callback, total_timesteps=20000)
+model.learn(callback=eval_callback, total_timesteps=1000000)
 
 
 
