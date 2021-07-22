@@ -125,6 +125,11 @@ class CustomEnv(gym.Env):
 
     try:
       stats = next(self.DNN)
+      for key in stats:
+        for x in stats[key]:
+          if np.isnan(x):
+            return self.observation_scaling(self.obs), 0.0, True, {}
+
       self.build_observation(stats)
       # Saving logs
       for key in self.metrics:
