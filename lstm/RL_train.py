@@ -17,7 +17,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 
 # Local imports
-import data
+import corrupted_data as data
 import hyperlstm
 
 import utils
@@ -31,7 +31,7 @@ from stn_utils.hyperparameter import perturb, hparam_transform, hnet_transform, 
 
 # RL - All modifications of STN code are explained by a comment preceded by "RL"
 # RL - Encapsulation of STN code using an iterator function
-def iterator(train_steps, valid_steps):
+def iterator(train_steps, valid_steps, save_filename, corruption):
     # RL - Definition of global scope for variable used in multiple function
     global model, htensor, hscale, hdict, criterion, param_optimizer, hparam_optimizer, train_hidden, epoch_train_loss, global_step, val_hidden, stats_to_yield, hyperparams
     parser = argparse.ArgumentParser(description='PyTorch PennTreeBank RNN/LSTM Language Model')
@@ -140,7 +140,7 @@ def iterator(train_steps, valid_steps):
                         help="Run the experiment and overwrite a (possibly existing) result file.")
 
     # RL - Tuning of all hyper-parameters with the specified number of train steps and validation steps
-    args = parser.parse_args(args=['--train_steps=%d' % train_steps, '--val_steps=%d' % valid_steps, '--tune_all', '--save_dir=RL', '--overwrite'])
+    args = parser.parse_args(args=['--train_steps=%d' % train_steps, '--val_steps=%d' % valid_steps, '--tune_all', '--save_dir=%s' % save_filename, '--overwrite'])
     args.tied = True
     # RL - Hyper-parameters default values for the warming train epochs 
     hyperparams = {}
@@ -211,7 +211,7 @@ def iterator(train_steps, valid_steps):
             model, htensor, hscale, criterion, param_optimizer, hparam_optimizer = torch.load(f)
 
 
-    corpus = data.Corpus(args.data)
+    corpus = data.Corpus(args.data, corruption)
 
     eval_batch_size = 10
     test_batch_size = 1
@@ -514,7 +514,7 @@ def iterator(train_steps, valid_steps):
                 # RL - Presentation to the agent of the metrics and hyper-parameters values
                 yield stats_to_yield
                 # RL - Loading of the new hyper-parameters values given by the agent
-                with open('hparams.ser', 'rb') as fp:
+                with open('%s.ser' % save_filename, 'rb') as fp:
                     hyperparams = pickle.load(fp)
                 # RL - Reset of the dictionnary of metrics and hyper-parameters values
                 stats_to_yield = {'global_step' : [], 'wdrop' : [], 'dropoute' : [], 'dropouti' : [], 'dropouto' : [], 'dropouth' : [], 'alpha' : [], 'beta' : [], 'val_ppl' : [], 'val_loss' : [], 'ppl' : [], 'loss' : []}

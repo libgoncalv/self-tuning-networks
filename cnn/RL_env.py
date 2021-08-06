@@ -40,11 +40,16 @@ class CustomEnv(gym.Env):
   """Custom Environment that follows gym interface"""
   metadata = {'render.modes': ['human']}
 
-  def __init__(self, parameters, metrics, val_metrics, not_val_metrics, reward_metrics, test_mode=False):
+  def __init__(self, parameters, metrics, val_metrics, not_val_metrics, reward_metrics, save_filename, corruption, test_mode=False):
     super(CustomEnv, self).__init__()
 
     # Whether it is an environment used to train or test the agent 
     self.test_mode = test_mode
+    # Filename used in experiments
+    self.save_filename = save_filename
+    # Corruption level
+    self.corruption = corruption
+    # RL parameters
     self.parameters = parameters
     self.metrics = metrics
     self.val_metrics = val_metrics
@@ -52,9 +57,13 @@ class CustomEnv(gym.Env):
     self.reward_metrics = reward_metrics
 
     # Number of train steps between changing the hyper-parameters values
-    self.train_steps = 2
+    self.train_steps = 100
     # Number of validation steps used to compute validation metrics
     self.valid_steps = 1
+    # Progressively allows the agent to play more time
+    self.epoch_schedule = [25, 50, 75, 100]
+    self.valid_batch_per_epoch = 26
+    self.n_games = 0
     # Number of steps between updates of validation metrics
     # Avoids reaching the upper limit of number of thresholdout validation metrics presented to the agent
     self.steps_between_thresholdouts = 10
@@ -120,7 +129,7 @@ class CustomEnv(gym.Env):
       i += 1
 
     # Writing of new hyper-parameters values
-    with open('hparams.ser', 'wb') as fp:
+    with open('%s.ser' % self.save_filename, 'wb') as fp:
       pickle.dump(hparams_dict, fp)
 
     try:
@@ -136,14 +145,19 @@ class CustomEnv(gym.Env):
         self.logs[key].extend(stats[key])
       for key in self.parameters:
         self.logs[key].extend(stats[key])
-      done = False
+
+      if not self.test_mode and self.n_games//100 < len(self.epoch_schedule) and self.n_steps//self.valid_batch_per_epoch >= self.epoch_schedule[self.n_games//100]:
+        self.n_games+=1
+        done = True
+      else:
+        done = False
     except StopIteration:
       done = True
       if (self.test_mode):
         print("This was a test acc game for the agent")
 
     obs_scaled = self.observation_scaling(self.obs)
-    reward = self.build_reward(done)
+    reward = self.build_reward()
 
     return obs_scaled, reward, done, {}
 
@@ -161,9 +175,11 @@ class CustomEnv(gym.Env):
     self.last_reward_metrics = {}
     for key in self.reward_metrics:
       self.last_reward_metrics[key] = 0.0
-    self.DNN = iterator(self.train_steps, self.valid_steps)
+
+    self.DNN = iterator(self.train_steps, self.valid_steps, self.save_filename, self.corruption)
     stats = next(self.DNN)
     self.build_observation(stats, init=True)
+    self.build_reward()
     
     return self.obs
 
@@ -214,32 +230,39 @@ class CustomEnv(gym.Env):
     if init:
       self.obs = np.zeros((len(metrics)+1, self.window_size), dtype=np.float32)
 
-    # Otherwise, we update it with last obtained stats
-    else:
-      for i in range(self.window_size-1):
-        for j in range(len(self.obs)):
-          self.obs[j][i] = self.obs[j][i+1]
+    # We update it with last obtained stats
+    for i in range(self.window_size-1):
+      for j in range(len(self.obs)):
+        self.obs[j][i] = self.obs[j][i+1]
 
-      i = 0
-      for key in self.not_val_metrics:
-        self.obs[i][-1] = self.not_val_metrics[key]
-        i += 1
-      for key in self.val_metrics:
-        self.obs[i][-1] = self.val_metrics[key]
-        i += 1
-      self.obs[i][-1] = mean(stats['global_step'])
-
+    i = 0
+    for key in self.not_val_metrics:
+      self.obs[i][-1] = self.not_val_metrics[key]
+      i += 1
+    for key in self.val_metrics:
+      self.obs[i][-1] = self.val_metrics[key]
+      i += 1
+    self.obs[i][-1] = mean(stats['global_step'])
 
 
 
 
-  def build_reward(self, done):
+
+  def build_reward(self):
     reward = 0.0
+    valid = False
+    # Calculation of validation differences
     for key in self.reward_metrics:
       if key in self.val_metrics:
+        if (self.val_metrics[key] - self.last_reward_metrics[key]) == 0:
+          valid = True
         reward += self.reward_metrics[key] * (self.val_metrics[key] - self.last_reward_metrics[key])
-      else:
+    # If validation differences are equal to zero
+    # Calculation training differences
+    for key in self.reward_metrics:
+      if not valid and not key in self.val_metrics:
         reward += self.reward_metrics[key] * (self.not_val_metrics[key] - self.last_reward_metrics[key])
+    # Update of last metrics
     for key in self.reward_metrics:
       if key in self.val_metrics:
         self.last_reward_metrics[key] = self.val_metrics[key]
@@ -265,33 +288,36 @@ class CustomEnv(gym.Env):
 
 
 
-env = CustomEnv(parameters, metrics, val_metrics, not_val_metrics, reward_metrics)
+save_filename = 'normal'
+corruption = 0.0
+
+env = CustomEnv(parameters, metrics, val_metrics, not_val_metrics, reward_metrics, save_filename, corruption)
 n_actions = env.action_space.shape[-1]
 action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=0.1 * np.ones(n_actions))  
 
-valid_env = CustomEnv(parameters, metrics, val_metrics, not_val_metrics, reward_metrics, test_mode=True)
+valid_env = CustomEnv(parameters, metrics, val_metrics, not_val_metrics, reward_metrics, save_filename, corruption, test_mode=True)
 policy_kwargs = dict(normalize_images=False)
-eval_callback = EvalCallback(valid_env, verbose=1, deterministic=True, render=False, n_eval_episodes=1, eval_freq=100000, best_model_save_path="./Agents/SAC/")
+eval_callback = EvalCallback(valid_env, verbose=1, deterministic=True, render=False, n_eval_episodes=3, eval_freq=1000, best_model_save_path="./Agents/%s/" % save_filename)
 
 model = SAC("MlpPolicy", env, action_noise=action_noise, policy_kwargs=policy_kwargs, verbose=0)
-model.learn(callback=eval_callback, total_timesteps=1000000)
+model.learn(callback=eval_callback, total_timesteps=10000)
 
 
 
 logs = env.get_stat()
-with open('Results/train.ser', 'wb') as fp:
+with open('Results/%s/train.ser' % save_filename, 'wb') as fp:
     pickle.dump(logs, fp)
 
 logs = valid_env.get_stat()
-with open('Results/valid.ser', 'wb') as fp:
+with open('Results/%s/valid.ser' % save_filename, 'wb') as fp:
     pickle.dump(logs, fp)
 
 
 
 
-env = CustomEnv(parameters, metrics, val_metrics, not_val_metrics, reward_metrics, test_mode=True)
-model = SAC.load("Agents/SAC/best_model.zip")
-for ep in range(4):
+env = CustomEnv(parameters, metrics, val_metrics, not_val_metrics, reward_metrics, save_filename, corruption, test_mode=True)
+model = SAC.load("Agents/%s/best_model.zip" % save_filename)
+for ep in range(3):
     obs = env.reset()
     done = False
     while not done:
@@ -300,5 +326,5 @@ for ep in range(4):
 
 
 logs = env.get_stat()
-with open('Results/test.ser', 'wb') as fp:
+with open('Results/%s/test.ser' % save_filename, 'wb') as fp:
     pickle.dump(logs, fp)

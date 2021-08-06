@@ -20,8 +20,8 @@ sys.path.insert(0, 'hypermodels')
 from util.dropout import dropout
 from hypermodels.small import SmallCNN
 from hypermodels.alexnet import AlexNet
-from datasets.cifar import CustomCIFAR10
-from datasets.loaders import create_loaders
+from datasets.corrupted_cifar import CustomCIFAR10
+from datasets.corrupted_loaders import create_loaders
 
 from util.hyperparameter import create_hparams
 from stn_utils.hyperparameter import perturb, hparam_transform, \
@@ -36,7 +36,7 @@ from logger import Logger
 
 # RL - All modifications of STN code are explained by a comment preceded by "RL"
 # RL - Encapsulation of STN code using an iterator function
-def iterator(train_steps, valid_steps):
+def iterator(train_steps, valid_steps, save_filename, corruption):
     # RL - Definition of global scope for variable used in multiple function
     global cnn, nonfil_htensor, fil_htensor, hscale, cnn_optimizer, hyper_optimizer, htensor, hyperparams
     ###############################################################################
@@ -103,7 +103,7 @@ def iterator(train_steps, valid_steps):
     parser.add_argument('--seed', type=int, default=0, help='random seed (default: 0)')
 
     # RL - Tuning of all hyper-parameters with the specified number of train steps and validation steps
-    args = parser.parse_args(args=['--train_steps=%d' % train_steps, '--valid_steps=%d' % valid_steps, '--save', '--tune_all', '--entropy_weight=1e-3', '--log_interval=1'])
+    args = parser.parse_args(args=['--train_steps=%d' % train_steps, '--valid_steps=%d' % valid_steps, '--save', '--tune_all', '--dir=%s' % save_filename, '--entropy_weight=1e-3', '--log_interval=1'])
     # RL - Hyper-parameters default values for the warming train epochs 
     hyperparams = {}
     hyperparams['dropout0'] = args.start_drop
@@ -147,7 +147,7 @@ def iterator(train_steps, valid_steps):
     ###############################################################################
     # Data Loading/Processing
     ###############################################################################
-    train_loader, valid_loader, test_loader = create_loaders(args, hyper=True)
+    train_loader, valid_loader, test_loader = create_loaders(args, corruption, hyper=True)
 
     train_iter = iter(train_loader)
     valid_iter = iter(valid_loader)
@@ -474,7 +474,7 @@ def iterator(train_steps, valid_steps):
                     # RL - Presentation to the agent of the metrics and hyper-parameters values
                     yield stats_to_yield
                     # RL - Loading of the new hyper-parameters values given by the agent
-                    with open('hparams.ser', 'rb') as fp:
+                    with open('%s.ser' % save_filename, 'rb') as fp:
                         hyperparams = pickle.load(fp)
                     # RL - Reset of the dictionnary of metrics and hyper-parameters values
                     stats_to_yield = {'global_step' : [], 'dropout0' : [], 'dropout1' : [], 'dropout2' : [], 'dropout3' : [], 'dropout4' : [], \
