@@ -103,7 +103,7 @@ def iterator(train_steps, valid_steps, save_filename, corruption):
     parser.add_argument('--seed', type=int, default=0, help='random seed (default: 0)')
 
     # RL - Tuning of all hyper-parameters with the specified number of train steps and validation steps
-    args = parser.parse_args(args=['--train_steps=%d' % train_steps, '--valid_steps=%d' % valid_steps, '--save', '--tune_all', '--dir=%s' % save_filename, '--entropy_weight=1e-3', '--log_interval=1'])
+    args = parser.parse_args(args=['--train_steps=%d' % train_steps, '--valid_steps=%d' % valid_steps, '--save', '--tune_all', '--tunes_scales', '--dir=%s' % save_filename, '--entropy_weight=1e-3', '--log_interval=1'])
     # RL - Hyper-parameters default values for the warming train epochs 
     hyperparams = {}
     hyperparams['dropout0'] = args.start_drop
