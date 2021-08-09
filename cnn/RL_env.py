@@ -304,6 +304,12 @@ model.learn(callback=eval_callback, total_timesteps=10000)
 
 
 
+
+if not os.path.exists('Results'):
+  os.makedirs('Results')
+if not os.path.exists('Results/%s' % save_filename):
+  os.makedirs('Results/%s' % save_filename)
+
 logs = env.get_stat()
 with open('Results/%s/train.ser' % save_filename, 'wb') as fp:
     pickle.dump(logs, fp)
