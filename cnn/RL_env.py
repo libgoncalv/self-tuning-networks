@@ -35,16 +35,21 @@ not_val_metrics = {'acc' : 0.0, 'loss' : 0.0}
 # Metrics used for computing the reward of the agent with their respective coefficient factor
 reward_metrics = {'val_acc' : 100.0, 'acc' : 1.0}
 
+save_filename = 'normal'
+corruption = 0.0
+
 
 class CustomEnv(gym.Env):
   """Custom Environment that follows gym interface"""
   metadata = {'render.modes': ['human']}
 
-  def __init__(self, parameters, metrics, val_metrics, not_val_metrics, reward_metrics, save_filename, corruption, test_mode=False):
+  def __init__(self, parameters, metrics, val_metrics, not_val_metrics, reward_metrics, save_filename, corruption, do_thresholdout=True, test_mode=False):
     super(CustomEnv, self).__init__()
 
     # Whether it is an environment used to train or test the agent 
     self.test_mode = test_mode
+    # Whether to do thresholdout or not
+    self.do_thresholdout = do_thresholdout
     # Filename used in experiments
     self.save_filename = save_filename
     # Corruption level
@@ -134,10 +139,14 @@ class CustomEnv(gym.Env):
 
     try:
       stats = next(self.DNN)
-      for key in stats:
-        for x in stats[key]:
+      for key in self.metrics:
+        for i, x in enumerate(stats[key]):
           if np.isnan(x):
             return self.observation_scaling(self.obs), 0.0, True, {}
+          if x < self.metrics[key][0]:
+            stats[key][i] = self.metrics[key][0]
+          if x > self.metrics[key][1]:
+            stats[key][i] = self.metrics[key][1]
 
       self.build_observation(stats)
       # Saving logs
@@ -223,8 +232,9 @@ class CustomEnv(gym.Env):
     if self.n_steps % self.steps_between_thresholdouts == 0:
         for key in self.val_metrics:
           self.val_metrics[key] = mean(self.running_avg[key])
-        for key in self.val_metrics:
-          self.val_metrics[key] = self.thresholdout(self.not_val_metrics[self.metrics[key][3]], self.val_metrics[key], self.metrics[key][2])
+        if self.do_thresholdout:
+          for key in self.val_metrics:
+            self.val_metrics[key] = self.thresholdout(self.not_val_metrics[self.metrics[key][3]], self.val_metrics[key], self.metrics[key][2])
 
     # If the game begins, we initialize the obs matrix
     if init:
@@ -288,8 +298,6 @@ class CustomEnv(gym.Env):
 
 
 
-save_filename = 'normal'
-corruption = 0.0
 
 env = CustomEnv(parameters, metrics, val_metrics, not_val_metrics, reward_metrics, save_filename, corruption)
 n_actions = env.action_space.shape[-1]
